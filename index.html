@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Siapakah Impostornya?</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="setup-screen" class="screen">
+        <div class="card">
+            <h1>Siapakah Impostornya?</h1>
+            <p>Tentukan jumlah pemain untuk memulai.</p>
+            <div class="input-group">
+                <label for="innocent-count">Jumlah Innocent:</label>
+                <input type="number" id="innocent-count" value="4" min="1">
+            </div>
+            <div class="input-group">
+                <label for="impostor-count">Jumlah Impostor:</label>
+                <input type="number" id="impostor-count" value="1" min="1">
+            </div>
+            <button id="setup-start-button">Buat Permainan</button>
+        </div>
+    </div>
+
+    <div id="pass-device-screen" class="screen hidden">
+        <div class="card">
+            <h2 id="pass-to-player-text">Oper perangkat ke Pemain 1</h2>
+            <p>Pemain lain jangan mengintip!</p>
+            <button id="show-role-button">Tampilkan Peran Saya</button>
+        </div>
+    </div>
+
+    <div id="reveal-role-screen" class="screen hidden">
+        <div class="card" id="role-card">
+            <p>Peran kamu adalah...</p>
+            <h2 id="player-role">INNOCENT</h2>
+            <p>Kata rahasiamu adalah:</p>
+            <h3 id="player-word">APEL</h3>
+            <p id="role-description">Jelaskan kata ini agar pemain lain percaya kamu bukan Impostor!</p>
+            <button id="hide-role-button">Sembunyikan & Lanjutkan</button>
+        </div>
+    </div>
+
+    <div id="gameplay-screen" class="screen hidden">
+        <div class="card">
+            <h1>Semua Siap!</h1>
+            <p>Semua pemain telah menerima peran masing-masing.</p>
+            <div id="game-summary"></div>
+            <p>Mulai berdiskusi dan jelaskan kata kalian. Temukan siapa Impostornya!</p>
+            <button id="restart-button">Mulai Game Baru</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
