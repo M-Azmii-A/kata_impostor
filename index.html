@@ -7,11 +7,12 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <button id="darkmode-toggle" aria-label="Toggle dark mode">🌙</button>
 
     <div id="setup-screen" class="screen">
         <div class="card">
             <h1>Siapakah Impostornya?</h1>
-            <p>Tentukan jumlah pemain untuk memulai.</p>
+            <p>Tentukan jumlah pemain dan pilih tema untuk memulai.</p>
             <div class="input-group">
                 <label for="innocent-count">Jumlah Innocent:</label>
                 <input type="number" id="innocent-count" value="4" min="1">
@@ -20,6 +21,14 @@
                 <label for="impostor-count">Jumlah Impostor:</label>
                 <input type="number" id="impostor-count" value="1" min="1">
             </div>
+
+            <div class="theme-section">
+                <label class="theme-label">Pilih Tema Kata:</label>
+                <div id="theme-grid" class="theme-grid">
+                    <!-- Tema akan di-render oleh JS -->
+                </div>
+            </div>
+
             <button id="setup-start-button">Buat Permainan</button>
         </div>
     </div>
