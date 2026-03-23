@@ -271,28 +271,22 @@
             pointer-events: none;
             z-index: 9999;
             display: none;
-            filter: drop-shadow(0 10px 28px rgba(0,0,0,0.65));
-            will-change: transform;
+            filter: drop-shadow(0 6px 20px rgba(0,0,0,0.55));
+            will-change: left, top;
+            border-radius: 6px;
         }
         #drag-ghost.visible { display: block; }
-        #drag-ghost .piece-mini {
-            transform: scale(1.4);
-            transform-origin: top left;
-        }
-        #drag-ghost .pmcell {
-            box-shadow: inset 0 -3px 0 rgba(0,0,0,0.3), inset 0 2px 0 rgba(255,255,255,0.28);
-        }
         .piece-slot.dragging {
             transform: scale(0.82) !important;
             opacity: 0.35 !important;
         }
+        /* Preview: solid fill + outline, no shrink so it matches ghost exactly */
         .gcell.preview {
-            animation: previewPulse 0.7s ease-in-out infinite alternate !important;
-            transform: scale(0.9) !important;
-        }
-        @keyframes previewPulse {
-            from { opacity: 0.4;  transform: scale(0.88); }
-            to   { opacity: 0.72; transform: scale(0.97); }
+            outline: 2px solid rgba(255,255,255,0.5) !important;
+            outline-offset: -2px;
+            opacity: 0.7 !important;
+            transform: none !important;
+            transition: opacity 0.1s !important;
         }
         .gcell.just-placed {
             animation: placePop 0.28s cubic-bezier(0.175,0.885,0.32,1.4) forwards !important;
@@ -950,33 +944,52 @@ function checkGameOver() {
 }
 
 // =====================
-// DRAG GHOST
+// DRAG GHOST — GRID-SNAPPING
 // =====================
 const dragGhost = document.getElementById('drag-ghost');
-let ghostOffsetX = 0, ghostOffsetY = 0;
 let isDragging = false;
 let dragSlotIdx = null;
+let ghostRows = 0, ghostCols = 0;
+// The grid cell size in px (computed at drag start)
+let cellPx = 0;
+// Current snapped grid position of the ghost anchor
+let snapR = -1, snapC = -1;
+
+// Ghost cell size (matches grid cell size dynamically)
+const GHOST_SCALE = 1.0; // 1:1 with grid cell
+
+function getCellPx() {
+    const firstCell = gridEl.querySelector('.gcell');
+    if (!firstCell) return 40;
+    return firstCell.getBoundingClientRect().width;
+}
 
 function buildGhost(piece) {
     dragGhost.innerHTML = '';
-    const rows = piece.shape.length;
-    const cols = piece.shape[0].length;
+    ghostRows = piece.shape.length;
+    ghostCols = piece.shape[0].length;
+    cellPx = getCellPx();
+
+    const GAP = 3;
     const mini = document.createElement('div');
     mini.className = 'piece-mini';
-    mini.style.gridTemplateColumns = `repeat(${cols}, 22px)`;
-    mini.style.gridTemplateRows    = `repeat(${rows}, 22px)`;
-    mini.style.gap = '3px';
-    for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
+    mini.style.display = 'grid';
+    mini.style.gridTemplateColumns = `repeat(${ghostCols}, ${cellPx}px)`;
+    mini.style.gridTemplateRows    = `repeat(${ghostRows}, ${cellPx}px)`;
+    mini.style.gap = GAP + 'px';
+
+    for (let r = 0; r < ghostRows; r++) {
+        for (let c = 0; c < ghostCols; c++) {
             const pc = document.createElement('div');
-            pc.className = piece.shape[r][c] ? 'pmcell' : 'pmcell empty';
             if (piece.shape[r][c]) {
-                pc.style.background = piece.color;
-                pc.style.width = '22px';
-                pc.style.height = '22px';
+                pc.style.cssText = `
+                    width:${cellPx}px; height:${cellPx}px;
+                    background:${piece.color};
+                    border-radius:5px;
+                    box-shadow: inset 0 -3px 0 rgba(0,0,0,0.28), inset 0 2px 0 rgba(255,255,255,0.25);
+                `;
             } else {
-                pc.style.width = '22px';
-                pc.style.height = '22px';
+                pc.style.cssText = `width:${cellPx}px; height:${cellPx}px;`;
             }
             mini.appendChild(pc);
         }
@@ -984,45 +997,97 @@ function buildGhost(piece) {
     dragGhost.appendChild(mini);
 }
 
-function moveGhost(clientX, clientY) {
-    // Centre ghost on finger/cursor
-    const gw = dragGhost.offsetWidth  || 30;
-    const gh = dragGhost.offsetHeight || 30;
-    dragGhost.style.left = (clientX - gw / 2) + 'px';
-    dragGhost.style.top  = (clientY - gh / 2 - 20) + 'px'; // offset up slightly so finger doesn't hide it
+// Snap ghost position to grid, returns {r, c} or null if outside grid
+function snapGhostToGrid(clientX, clientY) {
+    cellPx = getCellPx();
+    const GAP = 3;
+    const gridRect = gridEl.getBoundingClientRect();
+
+    // How many cells wide/tall the ghost is
+    const halfW = (ghostCols * cellPx + (ghostCols - 1) * GAP) / 2;
+    const halfH = (ghostRows * cellPx + (ghostRows - 1) * GAP) / 2;
+
+    // Offset touch point up a bit so ghost shows above finger
+    const fingerOffsetY = ('ontouchstart' in window) ? cellPx * 1.5 : 0;
+
+    // Where should the top-left of the ghost be?
+    const ghostLeft = clientX - halfW;
+    const ghostTop  = clientY - halfH - fingerOffsetY;
+
+    // Which grid col/row does the ghost top-left fall into?
+    const relX = ghostLeft - gridRect.left;
+    const relY = ghostTop  - gridRect.top;
+    const step = cellPx + GAP;
+
+    let anchorC = Math.round(relX / step);
+    let anchorR = Math.round(relY / step);
+
+    // Clamp so piece stays inside grid
+    anchorC = Math.max(0, Math.min(anchorC, GRID_SIZE - ghostCols));
+    anchorR = Math.max(0, Math.min(anchorR, GRID_SIZE - ghostRows));
+
+    // Position ghost exactly on snapped grid position
+    const snappedLeft = gridRect.left + anchorC * step;
+    const snappedTop  = gridRect.top  + anchorR * step;
+
+    dragGhost.style.left = snappedLeft + 'px';
+    dragGhost.style.top  = snappedTop  + 'px';
+
+    // Is pointer inside or near the grid?
+    const margin = cellPx * 2;
+    const nearGrid = clientX >= gridRect.left - margin &&
+                     clientX <= gridRect.right  + margin &&
+                     clientY >= gridRect.top    - margin &&
+                     clientY <= gridRect.bottom + margin;
+
+    if (!nearGrid) return null;
+    return { r: anchorR, c: anchorC };
 }
 
 function startDrag(idx, clientX, clientY) {
     if (isPlacing || !pieces[idx]) return;
     isDragging = true;
     dragSlotIdx = idx;
+    snapR = -1; snapC = -1;
     selectPiece(idx);
 
     buildGhost(pieces[idx]);
-    moveGhost(clientX, clientY);
     dragGhost.style.opacity = '0';
+    dragGhost.style.transform = 'scale(0.8)';
     dragGhost.classList.add('visible');
-    // Fade in
-    requestAnimationFrame(() => { dragGhost.style.opacity = '1'; });
 
-    // Shrink the tray slot
+    const snap = snapGhostToGrid(clientX, clientY);
+    if (snap) { snapR = snap.r; snapC = snap.c; showPreview(snapR, snapC); }
+
+    requestAnimationFrame(() => {
+        dragGhost.style.transition = 'opacity 0.12s, transform 0.12s';
+        dragGhost.style.opacity = '1';
+        dragGhost.style.transform = 'scale(1)';
+        setTimeout(() => { dragGhost.style.transition = ''; }, 130);
+    });
+
     document.getElementById('slot-' + idx).classList.add('dragging');
 }
 
 function duringDrag(clientX, clientY) {
     if (!isDragging) return;
-    moveGhost(clientX, clientY);
 
-    // Find which grid cell is under cursor
-    dragGhost.style.display = 'none';
-    const el = document.elementFromPoint(clientX, clientY);
-    dragGhost.style.display = '';
-    if (el && el.dataset.r !== undefined) {
-        const r = parseInt(el.dataset.r);
-        const c = parseInt(el.dataset.c);
-        showPreview(r, c);
+    const snap = snapGhostToGrid(clientX, clientY);
+    if (snap) {
+        if (snap.r !== snapR || snap.c !== snapC) {
+            snapR = snap.r; snapC = snap.c;
+            showPreview(snapR, snapC);
+        }
     } else {
+        // Outside grid — float freely, clear preview
+        cellPx = getCellPx();
+        const fingerOffsetY = ('ontouchstart' in window) ? cellPx * 1.5 : 0;
+        const halfW = (ghostCols * cellPx + (ghostCols - 1) * 3) / 2;
+        const halfH = (ghostRows * cellPx + (ghostRows - 1) * 3) / 2;
+        dragGhost.style.left = (clientX - halfW) + 'px';
+        dragGhost.style.top  = (clientY - halfH - fingerOffsetY) + 'px';
         clearPreview();
+        snapR = -1; snapC = -1;
     }
 }
 
@@ -1030,35 +1095,51 @@ function endDrag(clientX, clientY) {
     if (!isDragging) return;
     isDragging = false;
 
-    // Hide ghost with a quick scale-down
-    dragGhost.style.transition = 'opacity 0.12s, transform 0.12s';
-    dragGhost.style.opacity = '0';
-    dragGhost.style.transform = 'scale(0.7)';
-    setTimeout(() => {
-        dragGhost.classList.remove('visible');
-        dragGhost.style.transition = '';
-        dragGhost.style.transform  = '';
-        dragGhost.style.opacity    = '1';
-    }, 130);
+    // Try to place at last snapped position
+    if (snapR >= 0 && snapC >= 0 && selectedPiece !== null && !isPlacing) {
+        const cells = getPieceCells(pieces[selectedPiece].shape, snapR, snapC);
+        if (canPlace(cells)) {
+            // Ghost snaps into grid with a quick scale animation before hiding
+            dragGhost.style.transition = 'opacity 0.1s, transform 0.1s';
+            dragGhost.style.opacity = '0';
+            dragGhost.style.transform = 'scale(1.08)';
+            setTimeout(() => {
+                dragGhost.classList.remove('visible');
+                dragGhost.style.transition = '';
+                dragGhost.style.transform  = '';
+                dragGhost.style.opacity    = '1';
+            }, 110);
+            clearPreview();
+            placePiece(selectedPiece, snapR, snapC);
+        } else {
+            // Can't place — bounce ghost back
+            dragGhost.style.transition = 'opacity 0.15s, transform 0.15s';
+            dragGhost.style.opacity = '0';
+            dragGhost.style.transform = 'scale(0.6)';
+            setTimeout(() => {
+                dragGhost.classList.remove('visible');
+                dragGhost.style.transition = '';
+                dragGhost.style.transform  = '';
+                dragGhost.style.opacity    = '1';
+            }, 150);
+            clearPreview();
+        }
+    } else {
+        dragGhost.style.transition = 'opacity 0.12s';
+        dragGhost.style.opacity = '0';
+        setTimeout(() => {
+            dragGhost.classList.remove('visible');
+            dragGhost.style.transition = '';
+            dragGhost.style.opacity    = '1';
+        }, 120);
+        clearPreview();
+    }
 
-    // Restore slot appearance
     if (dragSlotIdx !== null) {
         document.getElementById('slot-' + dragSlotIdx).classList.remove('dragging');
     }
-
-    // Find drop target
-    dragGhost.style.display = 'none';
-    const el = document.elementFromPoint(clientX, clientY);
-    dragGhost.style.display = '';
-    clearPreview();
-
-    if (el && el.dataset.r !== undefined && selectedPiece !== null && !isPlacing) {
-        const r = parseInt(el.dataset.r);
-        const c = parseInt(el.dataset.c);
-        placePiece(selectedPiece, r, c);
-    }
-
     dragSlotIdx = null;
+    snapR = -1; snapC = -1;
 }
 
 // =====================
@@ -1075,7 +1156,6 @@ trayEl.addEventListener('mousedown', e => {
 
 document.addEventListener('mousemove', e => {
     if (!isDragging) {
-        // regular hover preview
         if (selectedPiece !== null && e.target.dataset && e.target.dataset.r !== undefined) {
             showPreview(parseInt(e.target.dataset.r), parseInt(e.target.dataset.c));
         }
