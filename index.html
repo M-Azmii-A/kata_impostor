@@ -3,65 +3,356 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Game Siapakah Impostornya?</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Game Malam — Pilih Permainan</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #0d0d0f;
+            --surface: #17171a;
+            --border: rgba(255,255,255,0.08);
+            --text: #f0f0f0;
+            --muted: #888;
+            --card-1: linear-gradient(135deg, #1a0a10 0%, #2d0f1c 100%);
+            --card-2: linear-gradient(135deg, #050e1a 0%, #0d2137 100%);
+            --card-3: linear-gradient(135deg, #0e0a1f 0%, #180d30 100%);
+            --accent-1: #ff4d6d;
+            --accent-2: #4cc9f0;
+            --accent-3: #a78bfa;
+        }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            overflow-x: hidden;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+            background-size: 48px 48px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .wrapper {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 560px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 36px;
+            animation: fadeDown 0.6s ease both;
+        }
+
+        .eyebrow {
+            font-size: 0.72em;
+            font-weight: 700;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 14px;
+        }
+
+        .title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(2.4rem, 8vw, 3.6rem);
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #fff 0%, #aaa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            margin-top: 14px;
+            color: var(--muted);
+            font-size: 0.97em;
+            line-height: 1.6;
+        }
+
+        #darkmode-toggle {
+            position: fixed;
+            top: 18px;
+            right: 18px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 1.1em;
+            cursor: pointer;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s, background 0.3s;
+        }
+        #darkmode-toggle:hover { transform: scale(1.12) rotate(18deg); }
+
+        .games {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .game-card {
+            position: relative;
+            display: block;
+            text-decoration: none;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.22s ease, box-shadow 0.22s ease;
+            animation: fadeUp 0.6s ease both;
+        }
+
+        .game-card:nth-child(1) { animation-delay: 0.08s; }
+        .game-card:nth-child(2) { animation-delay: 0.18s; }
+        .game-card:nth-child(3) { animation-delay: 0.28s; }
+
+        .game-card:hover {
+            transform: translateY(-4px) scale(1.01);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+
+        .game-card-inner {
+            padding: 26px 28px 22px;
+            display: flex;
+            align-items: flex-start;
+            gap: 18px;
+        }
+
+        .card-impostor { background: var(--card-1); }
+        .card-ular     { background: var(--card-2); }
+        .card-block    { background: var(--card-3); }
+
+        .game-card::after {
+            content: '';
+            position: absolute;
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            filter: blur(60px);
+            opacity: 0.18;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            bottom: -60px;
+            right: -40px;
+        }
+        .card-impostor::after { background: var(--accent-1); }
+        .card-ular::after     { background: var(--accent-2); }
+        .card-block::after    { background: var(--accent-3); }
+        .game-card:hover::after { opacity: 0.38; }
+
+        .card-emoji {
+            font-size: 2.6em;
+            line-height: 1;
+            flex-shrink: 0;
+            filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4));
+        }
+
+        .card-body { flex: 1; }
+
+        .card-tag {
+            font-size: 0.63em;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+        .card-impostor .card-tag { color: var(--accent-1); }
+        .card-ular .card-tag     { color: var(--accent-2); }
+        .card-block .card-tag    { color: var(--accent-3); }
+
+        .card-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.4em;
+            font-weight: 800;
+            line-height: 1.1;
+            margin-bottom: 8px;
+            color: #fff;
+        }
+
+        .card-desc {
+            font-size: 0.84em;
+            color: rgba(255,255,255,0.48);
+            line-height: 1.5;
+        }
+
+        .card-arrow {
+            position: absolute;
+            bottom: 22px;
+            right: 24px;
+            font-size: 1.1em;
+            opacity: 0.3;
+            transition: opacity 0.2s, transform 0.2s;
+            color: #fff;
+        }
+        .game-card:hover .card-arrow { opacity: 1; transform: translateX(4px); }
+
+        .badge-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 12px;
+        }
+        .badge {
+            font-size: 0.65em;
+            font-weight: 700;
+            padding: 2px 9px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.07);
+            color: rgba(255,255,255,0.42);
+            letter-spacing: 0.04em;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 28px;
+            color: var(--muted);
+            font-size: 0.78em;
+            animation: fadeUp 0.6s 0.45s ease both;
+        }
+
+        /* Light mode */
+        body.light {
+            --bg: #f2f2f4;
+            --surface: #ffffff;
+            --border: rgba(0,0,0,0.09);
+            --text: #111;
+            --muted: #999;
+            --card-1: linear-gradient(135deg, #fff0f3 0%, #ffd6e2 100%);
+            --card-2: linear-gradient(135deg, #edf8ff 0%, #cceeff 100%);
+            --card-3: linear-gradient(135deg, #f0eeff 0%, #ddd6fe 100%);
+        }
+        body.light::before {
+            background-image:
+                linear-gradient(rgba(0,0,0,0.035) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,0,0,0.035) 1px, transparent 1px);
+        }
+        body.light .title {
+            background: linear-gradient(135deg, #111 0%, #555 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+        }
+        body.light .card-title { color: #111; }
+        body.light .card-desc  { color: rgba(0,0,0,0.42); }
+        body.light .badge      { background: rgba(0,0,0,0.06); color: rgba(0,0,0,0.38); }
+        body.light .card-arrow { color: #111; }
+
+        @keyframes fadeDown {
+            from { opacity: 0; transform: translateY(-16px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+    </style>
 </head>
 <body>
-    <button id="darkmode-toggle" aria-label="Toggle dark mode">🌙</button>
 
-    <div id="setup-screen" class="screen">
-        <div class="card">
-            <h1>Siapakah Impostornya?</h1>
-            <p>Tentukan jumlah pemain dan pilih tema untuk memulai.</p>
-            <div class="input-group">
-                <label for="innocent-count">Jumlah Innocent:</label>
-                <input type="number" id="innocent-count" value="4" min="1">
-            </div>
-            <div class="input-group">
-                <label for="impostor-count">Jumlah Impostor:</label>
-                <input type="number" id="impostor-count" value="1" min="1">
-            </div>
+    <button id="darkmode-toggle" aria-label="Toggle mode">☀️</button>
 
-            <div class="theme-section">
-                <label class="theme-label">Pilih Tema Kata:</label>
-                <div id="theme-grid" class="theme-grid">
-                    <!-- Tema akan di-render oleh JS -->
+    <div class="wrapper">
+        <header class="header">
+            <p class="eyebrow">✦ Pilih Permainan ✦</p>
+            <h1 class="title">Game Malam</h1>
+            <p class="subtitle">Permainan seru untuk dimainkan sendiri maupun bersama teman.<br>Pilih salah satu untuk memulai.</p>
+        </header>
+
+        <div class="games">
+
+            <a class="game-card card-impostor" href="impostor.html">
+                <div class="game-card-inner">
+                    <div class="card-emoji">🕵️</div>
+                    <div class="card-body">
+                        <p class="card-tag">Tebak Peran</p>
+                        <h2 class="card-title">Siapakah Impostornya?</h2>
+                        <p class="card-desc">Setiap pemain mendapat kata rahasia. Satu orang adalah Impostor — temukan siapa dia!</p>
+                        <div class="badge-row">
+                            <span class="badge">3–10 Pemain</span>
+                            <span class="badge">8 Tema</span>
+                            <span class="badge">240 Pasang Kata</span>
+                        </div>
+                    </div>
                 </div>
-            </div>
+                <span class="card-arrow">→</span>
+            </a>
 
-            <button id="setup-start-button">Buat Permainan</button>
+            <a class="game-card card-ular" href="ular-tangga.html">
+                <div class="game-card-inner">
+                    <div class="card-emoji">🎲</div>
+                    <div class="card-body">
+                        <p class="card-tag">Papan Klasik</p>
+                        <h2 class="card-title">Ular Tangga</h2>
+                        <p class="card-desc">Lempar dadu, naiki tangga, hindari ular. Klasik yang selalu seru dimainkan bersama!</p>
+                        <div class="badge-row">
+                            <span class="badge">2–4 Pemain</span>
+                            <span class="badge">Papan 8×8</span>
+                            <span class="badge">Dadu Virtual</span>
+                        </div>
+                    </div>
+                </div>
+                <span class="card-arrow">→</span>
+            </a>
+
+            <a class="game-card card-block" href="block-blast.html">
+                <div class="game-card-inner">
+                    <div class="card-emoji">💥</div>
+                    <div class="card-body">
+                        <p class="card-tag">Puzzle Santai</p>
+                        <h2 class="card-title">Block Blast</h2>
+                        <p class="card-desc">Susun balok di papan, isi baris & kolom penuh untuk meledakkannya. Santai, tanpa batas waktu!</p>
+                        <div class="badge-row">
+                            <span class="badge">1 Pemain</span>
+                            <span class="badge">Papan 8×8</span>
+                            <span class="badge">Tanpa Batas Waktu</span>
+                            <span class="badge">Skor Terbaik</span>
+                        </div>
+                    </div>
+                </div>
+                <span class="card-arrow">→</span>
+            </a>
+
         </div>
+
+        <p class="footer">Tap kartu untuk memulai permainan</p>
     </div>
 
-    <div id="pass-device-screen" class="screen hidden">
-        <div class="card">
-            <h2 id="pass-to-player-text">Oper perangkat ke Pemain 1</h2>
-            <p>Pemain lain jangan mengintip!</p>
-            <button id="show-role-button">Tampilkan Peran Saya</button>
-        </div>
-    </div>
-
-    <div id="reveal-role-screen" class="screen hidden">
-        <div class="card" id="role-card">
-            <p>Peran kamu adalah...</p>
-            <h2 id="player-role">INNOCENT</h2>
-            <p>Kata rahasiamu adalah:</p>
-            <h3 id="player-word">APEL</h3>
-            <p id="role-description">Jelaskan kata ini agar pemain lain percaya kamu bukan Impostor!</p>
-            <button id="hide-role-button">Sembunyikan & Lanjutkan</button>
-        </div>
-    </div>
-
-    <div id="gameplay-screen" class="screen hidden">
-        <div class="card">
-            <h1>Semua Siap!</h1>
-            <p>Semua pemain telah menerima peran masing-masing.</p>
-            <div id="game-summary"></div>
-            <p>Mulai berdiskusi dan jelaskan kata kalian. Temukan siapa Impostornya!</p>
-            <button id="restart-button">Mulai Game Baru</button>
-        </div>
-    </div>
-
-    <script src="script.js"></script>
+    <script>
+        const toggle = document.getElementById('darkmode-toggle');
+        function applyMode(isLight) {
+            document.body.classList.toggle('light', isLight);
+            toggle.textContent = isLight ? '🌙' : '☀️';
+            localStorage.setItem('homeMode', isLight ? 'light' : 'dark');
+        }
+        toggle.addEventListener('click', () => applyMode(!document.body.classList.contains('light')));
+        const saved = localStorage.getItem('homeMode');
+        if (saved === 'light') applyMode(true);
+        else if (saved === null && window.matchMedia('(prefers-color-scheme: light)').matches) applyMode(true);
+    </script>
 </body>
 </html>
