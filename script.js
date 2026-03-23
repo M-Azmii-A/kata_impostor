@@ -146,6 +146,7 @@ const themes = {
             { innocent: 'SCOOTER', impostor: 'MOPED' },
             { innocent: 'KERETA KUDA', impostor: 'DELMAN' },
             { innocent: 'MONORAIL', impostor: 'MRT' },
+            { innocent: 'CABLE CAR', impostor: 'KERETA GANTUNG' },
             { innocent: 'KAPAL PESIAR', impostor: 'YACHT' },
             { innocent: 'HOVERCRAFT', impostor: 'AIRBOAT' },
         ]
