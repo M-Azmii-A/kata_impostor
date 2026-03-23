@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ular Tangga</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Nunito:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --card: #1c2128;
+            --border: rgba(255,255,255,0.07);
+            --text: #e6edf3;
+            --muted: #7d8590;
+            --accent: #4cc9f0;
+            --snake: #ff4d6d;
+            --ladder: #4ade80;
+            --cell-even: #1c2128;
+            --cell-odd: #21262d;
+            --shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+
+        body.light {
+            --bg: #f0f4f8;
+            --surface: #fff;
+            --card: #fff;
+            --border: rgba(0,0,0,0.08);
+            --text: #111;
+            --muted: #888;
+            --cell-even: #dbeafe;
+            --cell-odd: #eff6ff;
+            --shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 16px;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            max-width: 960px;
+            margin: 0 auto 20px;
+        }
+
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.85em;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: none;
+            transition: transform 0.18s;
+        }
+        .back-btn:hover { transform: translateX(-3px); }
+
+        .page-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.4em;
+            font-weight: 800;
+        }
+
+        #darkmode-toggle {
+            width: 38px; height: 38px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 1em;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: transform 0.2s;
+            flex-shrink: 0;
+        }
+        #darkmode-toggle:hover { transform: scale(1.12) rotate(18deg); }
+
+        .game-layout {
+            display: grid;
+            grid-template-columns: 1fr 220px;
+            gap: 16px;
+            max-width: 960px;
+            margin: 0 auto;
+            align-items: start;
+        }
+
+        @media (max-width: 700px) {
+            .game-layout { grid-template-columns: 1fr; }
+        }
+
+        /* ---- BOARD ---- */
+        .board-wrap {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 12px;
+            box-shadow: var(--shadow);
+            position: relative;
+        }
+
+        /* Container that holds both grid and SVG overlay */
+        .board-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 3px;
+            width: 100%;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* SVG overlay for arrows */
+        #arrows-svg {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        .cell {
+            background: var(--cell-even);
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding-top: 2px;
+            font-weight: 700;
+            position: relative;
+            transition: background 0.2s;
+            cursor: default;
+            user-select: none;
+            overflow: hidden;
+        }
+
+        .cell.odd { background: var(--cell-odd); }
+
+        .cell-num {
+            font-size: clamp(0.45em, 1.3vw, 0.72em);
+            color: var(--muted);
+            font-weight: 700;
+            line-height: 1.1;
+            z-index: 1;
+        }
+
+        .cell.has-snake  { background: rgba(255, 77, 109, 0.15) !important; }
+        .cell.has-ladder { background: rgba(74, 222, 128, 0.15) !important; }
+        .cell.is-dest-snake  { background: rgba(255, 77, 109, 0.08) !important; }
+        .cell.is-dest-ladder { background: rgba(74, 222, 128, 0.08) !important; }
+
+        .cell.finish {
+            background: linear-gradient(135deg, #facc15 0%, #f59e0b 100%) !important;
+        }
+        .cell.finish .cell-num { color: #000; font-weight: 900; }
+
+        /* small badge inside cell showing destination */
+        .cell-dest {
+            font-size: clamp(0.38em, 1vw, 0.6em);
+            font-weight: 800;
+            line-height: 1;
+            padding: 1px 3px;
+            border-radius: 3px;
+            margin-top: 1px;
+            z-index: 1;
+        }
+        .cell-dest.snake-dest  { color: var(--snake); }
+        .cell-dest.ladder-dest { color: var(--ladder); }
+
+        /* Players on cell */
+        .cell-players {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1px;
+            justify-content: center;
+            position: absolute;
+            bottom: 2px;
+            left: 0; right: 0;
+            z-index: 3;
+        }
+
+        .player-token {
+            width: clamp(10px, 2vw, 17px);
+            height: clamp(10px, 2vw, 17px);
+            border-radius: 50%;
+            border: 1.5px solid rgba(255,255,255,0.7);
+            font-size: clamp(6px, 1.1vw, 9px);
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 900;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+        }
+
+        /* ---- SIDEBAR ---- */
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 14px;
+            box-shadow: var(--shadow);
+        }
+
+        .panel h3 {
+            font-family: 'Syne', sans-serif;
+            font-size: 0.8em;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin-bottom: 10px;
+        }
+
+        .player-row {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 7px 8px;
+            border-radius: 9px;
+            margin-bottom: 5px;
+            transition: background 0.2s;
+        }
+        .player-row:last-child { margin-bottom: 0; }
+        .player-row.active-turn { background: rgba(76, 201, 240, 0.1); }
+
+        .player-dot {
+            width: 26px; height: 26px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.95em;
+            font-weight: 900;
+            flex-shrink: 0;
+            border: 2px solid rgba(255,255,255,0.25);
+        }
+
+        .player-info { flex: 1; min-width: 0; }
+        .player-name { font-weight: 700; font-size: 0.85em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .player-pos  { font-size: 0.72em; color: var(--muted); }
+
+        .turn-indicator {
+            font-size: 0.65em;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--accent);
+            white-space: nowrap;
+        }
+
+        .dice-wrap { text-align: center; }
+
+        .dice-face {
+            width: 64px; height: 64px;
+            background: var(--card);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            margin: 0 auto 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 2.2em;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+        }
+        .dice-face.rolling { animation: roll 0.5s ease; }
+
+        @keyframes roll {
+            0%   { transform: rotate(0deg) scale(1); }
+            25%  { transform: rotate(18deg) scale(1.1); }
+            50%  { transform: rotate(-12deg) scale(0.93); }
+            75%  { transform: rotate(8deg) scale(1.06); }
+            100% { transform: rotate(0deg) scale(1); }
+        }
+
+        .btn-roll {
+            width: 100%;
+            padding: 11px;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: 9px;
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.95em;
+            font-weight: 900;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.15s;
+        }
+        .btn-roll:hover:not(:disabled) { transform: translateY(-2px); opacity: 0.9; }
+        .btn-roll:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        .log-list {
+            max-height: 140px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .log-item {
+            font-size: 0.75em;
+            color: var(--muted);
+            padding: 3px 7px;
+            border-radius: 5px;
+            background: rgba(255,255,255,0.02);
+            line-height: 1.4;
+        }
+        .log-item.snake  { border-left: 3px solid var(--snake);  color: #ffb3c1; }
+        .log-item.ladder { border-left: 3px solid var(--ladder); color: #a7f3b0; }
+        .log-item.win    { border-left: 3px solid #facc15;       color: #facc15; font-weight: 700; }
+
+        /* Legend */
+        .legend { display: flex; flex-direction: column; gap: 7px; }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.78em; color: var(--muted); }
+        .legend-line {
+            width: 28px; height: 4px; border-radius: 2px; flex-shrink: 0;
+            position: relative;
+        }
+        .legend-line::after {
+            content: '▶';
+            position: absolute;
+            right: -6px;
+            top: -6px;
+            font-size: 9px;
+        }
+        .legend-line.snake-line  { background: var(--snake);  }
+        .legend-line.snake-line::after  { color: var(--snake); }
+        .legend-line.ladder-line { background: var(--ladder); }
+        .legend-line.ladder-line::after { color: var(--ladder); }
+
+        /* ---- SETUP OVERLAY ---- */
+        #setup-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            backdrop-filter: blur(6px);
+        }
+
+        .setup-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 32px;
+            width: 100%;
+            max-width: 360px;
+            text-align: center;
+            box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+        }
+
+        .setup-step-label {
+            font-size: 0.72em;
+            font-weight: 700;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 8px;
+        }
+
+        .setup-card h2 {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.7em;
+            font-weight: 800;
+            margin-bottom: 6px;
+        }
+        .setup-card > p { color: var(--muted); margin-bottom: 20px; font-size: 0.88em; }
+
+        .player-count-ctrl {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            justify-content: center;
+            margin-bottom: 18px;
+        }
+        .count-btn {
+            width: 32px; height: 32px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--text);
+            font-size: 1.2em;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: background 0.2s;
+        }
+        .count-btn:hover { background: var(--border); }
+        .count-label { font-weight: 900; font-size: 1.05em; }
+
+        .player-inputs { display: flex; flex-direction: column; gap: 9px; margin-bottom: 18px; }
+        .player-input-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 13px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--card);
+        }
+        .player-input-row input[type="text"] {
+            flex: 1;
+            background: none;
+            border: none;
+            outline: none;
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.9em;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .btn-start {
+            width: 100%;
+            padding: 13px;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: 10px;
+            font-family: 'Nunito', sans-serif;
+            font-size: 1em;
+            font-weight: 900;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.15s;
+        }
+        .btn-start:hover { transform: translateY(-2px); }
+
+        /* ---- WIN OVERLAY ---- */
+        #win-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.82);
+            z-index: 300;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            backdrop-filter: blur(8px);
+        }
+        #win-overlay.show { display: flex; }
+
+        .win-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 44px 32px;
+            text-align: center;
+            max-width: 320px;
+            width: 100%;
+            box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+        }
+        @keyframes popIn {
+            from { opacity: 0; transform: scale(0.7); }
+            to   { opacity: 1; transform: scale(1); }
+        }
+
+        .win-emoji { font-size: 3.5em; margin-bottom: 14px; }
+        .win-title { font-family: 'Syne', sans-serif; font-size: 1.9em; font-weight: 800; color: #facc15; margin-bottom: 6px; }
+        .win-name  { font-size: 1.25em; font-weight: 900; margin-bottom: 6px; }
+        .win-sub   { color: var(--muted); font-size: 0.88em; margin-bottom: 24px; }
+
+        .btn-restart {
+            width: 100%; padding: 12px;
+            background: #facc15; color: #000;
+            border: none; border-radius: 10px;
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.95em; font-weight: 900;
+            cursor: pointer; margin-bottom: 9px;
+        }
+        .btn-home {
+            width: 100%; padding: 12px;
+            background: var(--card); color: var(--text);
+            border: 1px solid var(--border); border-radius: 10px;
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.9em; font-weight: 700;
+            cursor: pointer; text-decoration: none;
+            display: block; text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- SETUP -->
+    <div id="setup-overlay">
+        <div class="setup-card">
+            <div class="setup-step-label">🎲 Ular Tangga</div>
+            <h2>Siapkan Pemain</h2>
+            <p>Masukkan nama pemain dan mulai bermain!</p>
+            <div class="player-count-ctrl">
+                <button class="count-btn" id="remove-player">−</button>
+                <span class="count-label" id="player-count-label">2 Pemain</span>
+                <button class="count-btn" id="add-player">+</button>
+            </div>
+            <div class="player-inputs" id="player-inputs"></div>
+            <button class="btn-start" id="btn-start-game">Mulai Permainan 🎲</button>
+        </div>
+    </div>
+
+    <!-- WIN -->
+    <div id="win-overlay">
+        <div class="win-card">
+            <div class="win-emoji">🏆</div>
+            <div class="win-title">MENANG!</div>
+            <div class="win-name" id="win-player-name">Pemain 1</div>
+            <div class="win-sub">mencapai kotak 100 duluan!</div>
+            <button class="btn-restart" id="btn-restart">Main Lagi</button>
+            <a class="btn-home" href="index.html">← Kembali ke Beranda</a>
+        </div>
+    </div>
+
+    <!-- TOP BAR -->
+    <div class="topbar">
+        <a class="back-btn" href="index.html">← Beranda</a>
+        <span class="page-title">🐍 Ular Tangga</span>
+        <button id="darkmode-toggle">☀️</button>
+    </div>
+
+    <!-- GAME -->
+    <div class="game-layout">
+        <div class="board-wrap">
+            <div class="board-container">
+                <div class="board" id="board"></div>
+                <svg id="arrows-svg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet">
+                    <defs>
+                        <marker id="arrowSnake" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L6,3 L0,6 Z" fill="#ff4d6d"/>
+                        </marker>
+                        <marker id="arrowLadder" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L6,3 L0,6 Z" fill="#4ade80"/>
+                        </marker>
+                    </defs>
+                    <!-- Lines drawn by JS -->
+                </svg>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="panel">
+                <h3>Pemain</h3>
+                <div id="players-list"></div>
+            </div>
+
+            <div class="panel">
+                <h3>Giliran Dadu</h3>
+                <div class="dice-wrap">
+                    <div class="dice-face" id="dice-face">⚀</div>
+                    <button class="btn-roll" id="btn-roll">🎲 Lempar Dadu</button>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3>Keterangan</h3>
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-line ladder-line"></div>
+                        <span>Tangga — naik ke kotak tujuan</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-line snake-line"></div>
+                        <span>Ular — turun ke kotak tujuan</span>
+                    </div>
+                    <div class="legend-item" style="margin-top:4px">
+                        <span style="font-size:1.1em">🟩</span>
+                        <span>Kotak asal tangga</span>
+                    </div>
+                    <div class="legend-item">
+                        <span style="font-size:1.1em">🟥</span>
+                        <span>Kotak asal ular</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3>Log</h3>
+                <div class="log-list" id="log-list">
+                    <div class="log-item">Permainan belum dimulai.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+const DICE_EMOJI = ['⚀','⚁','⚂','⚃','⚄','⚅'];
+
+// SNAKES: landing square → slide down to
+const SNAKES = {
+    99: 5,
+    92: 51,
+    87: 24,
+    74: 53,
+    64: 15,
+    62: 19,
+    56: 11,
+    49: 9,
+    47: 26,
+    16: 6
+};
+// LADDERS: landing square → climb up to
+const LADDERS = {
+    2: 38,
+    7: 14,
+    8: 31,
+    15: 26,
+    21: 42,
+    28: 84,
+    36: 44,
+    51: 67,
+    71: 91,
+    78: 98
+};
+
+const PLAYER_COLORS = ['#ff4d6d','#4cc9f0','#4ade80','#facc15'];
+const PLAYER_EMOJI  = ['🔴','🔵','🟢','🟡'];
+
+let players = [];
+let currentTurn = 0;
+let rolling = false;
+let gameActive = false;
+let setupPlayerCount = 2;
+let setupNames = ['Pemain 1','Pemain 2','Pemain 3','Pemain 4'];
+
+const boardEl        = document.getElementById('board');
+const arrowsSvg      = document.getElementById('arrows-svg');
+const playersListEl  = document.getElementById('players-list');
+const diceFaceEl     = document.getElementById('dice-face');
+const btnRoll        = document.getElementById('btn-roll');
+const logListEl      = document.getElementById('log-list');
+const setupOverlay   = document.getElementById('setup-overlay');
+const winOverlay     = document.getElementById('win-overlay');
+const playerInputsEl = document.getElementById('player-inputs');
+const playerCountLbl = document.getElementById('player-count-label');
+
+// Convert cell number to [col, row] position in the 10x10 grid (0-indexed from top-left)
+function cellToGridPos(num) {
+    // Row 0 (top) = 100–91, Row 1 = 81–90, etc.
+    const rowFromBottom = Math.floor((num - 1) / 10); // 0=bottom row (1-10)
+    const rowFromTop = 9 - rowFromBottom;
+    const posInRow = (num - 1) % 10; // 0-9 left-to-right from lower-left
+    // Even rows from bottom go left-to-right, odd rows go right-to-left
+    const col = rowFromBottom % 2 === 0 ? posInRow : 9 - posInRow;
+    return { col, row: rowFromTop };
+}
+
+// Convert grid col/row to SVG coordinates (centre of cell)
+// SVG viewBox is 0 0 1000 1000, each cell = 100x100 with 3px gap
+// We approximate cell centres:
+function gridToSVG(col, row) {
+    const cellW = 100;
+    const cellH = 100;
+    const gap = 3;
+    const totalW = 10 * cellW + 9 * gap; // ~1027 but we use 1000 viewBox — scale factor
+    const scale = 1000 / totalW;
+    const cx = (col * (cellW + gap) + cellW / 2) * scale;
+    const cy = (row * (cellH + gap) + cellH / 2) * scale;
+    return { x: cx, y: cy };
+}
+
+function cellToSVG(num) {
+    const { col, row } = cellToGridPos(num);
+    return gridToSVG(col, row);
+}
+
+// Offset start/end points so snake and ladder lines don't exactly overlap
+function offset(pt, dx, dy) {
+    return { x: pt.x + dx, y: pt.y + dy };
+}
+
+function drawArrows() {
+    // Remove old lines (keep defs)
+    Array.from(arrowsSvg.querySelectorAll('line, path, polyline')).forEach(el => el.remove());
+
+    // Draw ladders (green, offset slightly left)
+    Object.entries(LADDERS).forEach(([from, to]) => {
+        const a = cellToSVG(Number(from));
+        const b = cellToSVG(Number(to));
+        const ao = offset(a, -8, 0);
+        const bo = offset(b, -8, 0);
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', ao.x);
+        line.setAttribute('y1', ao.y);
+        line.setAttribute('x2', bo.x);
+        line.setAttribute('y2', bo.y);
+        line.setAttribute('stroke', '#4ade80');
+        line.setAttribute('stroke-width', '4');
+        line.setAttribute('stroke-opacity', '0.85');
+        line.setAttribute('marker-end', 'url(#arrowLadder)');
+        line.setAttribute('stroke-dasharray', '10 4');
+        arrowsSvg.appendChild(line);
+    });
+
+    // Draw snakes (red, offset slightly right)
+    Object.entries(SNAKES).forEach(([from, to]) => {
+        const a = cellToSVG(Number(from));
+        const b = cellToSVG(Number(to));
+        const ao = offset(a, 8, 0);
+        const bo = offset(b, 8, 0);
+
+        // Slightly curved snake using quadratic bezier
+        const mx = (ao.x + bo.x) / 2 + (ao.y - bo.y) * 0.25;
+        const my = (ao.y + bo.y) / 2 + (bo.x - ao.x) * 0.25;
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', `M${ao.x},${ao.y} Q${mx},${my} ${bo.x},${bo.y}`);
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', '#ff4d6d');
+        path.setAttribute('stroke-width', '4');
+        path.setAttribute('stroke-opacity', '0.85');
+        path.setAttribute('marker-end', 'url(#arrowSnake)');
+        arrowsSvg.appendChild(path);
+    });
+}
+
+function buildBoard() {
+    boardEl.innerHTML = '';
+    for (let row = 0; row < 10; row++) {
+        const base = 100 - row * 10;
+        for (let col = 0; col < 10; col++) {
+            const num = row % 2 === 0 ? base - col : base - 9 + col;
+
+            const cell = document.createElement('div');
+            cell.className = 'cell' + (num % 2 === 1 ? ' odd' : '');
+            cell.id = 'cell-' + num;
+
+            if (num === 100) cell.classList.add('finish');
+            if (SNAKES[num])  cell.classList.add('has-snake');
+            if (LADDERS[num]) cell.classList.add('has-ladder');
+
+            // Cells that are destinations also get a subtle tint
+            const isSnakeDest  = Object.values(SNAKES).includes(num);
+            const isLadderDest = Object.values(LADDERS).includes(num);
+            if (isSnakeDest && !SNAKES[num])   cell.classList.add('is-dest-snake');
+            if (isLadderDest && !LADDERS[num]) cell.classList.add('is-dest-ladder');
+
+            const numEl = document.createElement('div');
+            numEl.className = 'cell-num';
+            numEl.textContent = num === 100 ? '🏆' : num;
+            cell.appendChild(numEl);
+
+            // Show destination badge on source cells
+            if (SNAKES[num]) {
+                const dest = document.createElement('div');
+                dest.className = 'cell-dest snake-dest';
+                dest.textContent = `↓${SNAKES[num]}`;
+                cell.appendChild(dest);
+            } else if (LADDERS[num]) {
+                const dest = document.createElement('div');
+                dest.className = 'cell-dest ladder-dest';
+                dest.textContent = `↑${LADDERS[num]}`;
+                cell.appendChild(dest);
+            }
+
+            const playersEl = document.createElement('div');
+            playersEl.className = 'cell-players';
+            playersEl.id = 'players-' + num;
+            cell.appendChild(playersEl);
+
+            boardEl.appendChild(cell);
+        }
+    }
+
+    // Draw arrows after board is in DOM (needs layout)
+    requestAnimationFrame(() => drawArrows());
+}
+
+function renderTokens() {
+    document.querySelectorAll('.cell-players').forEach(el => el.innerHTML = '');
+    players.forEach(p => {
+        const container = document.getElementById('players-' + p.pos);
+        if (!container) return;
+        const token = document.createElement('div');
+        token.className = 'player-token';
+        token.style.background = p.color;
+        token.textContent = p.emoji;
+        container.appendChild(token);
+    });
+}
+
+function renderPlayersList() {
+    playersListEl.innerHTML = '';
+    players.forEach((p, i) => {
+        const row = document.createElement('div');
+        row.className = 'player-row' + (i === currentTurn && gameActive ? ' active-turn' : '');
+        row.innerHTML = `
+            <div class="player-dot" style="background:${p.color}">${p.emoji}</div>
+            <div class="player-info">
+                <div class="player-name">${p.name}</div>
+                <div class="player-pos">Kotak ${p.pos}</div>
+            </div>
+            ${i === currentTurn && gameActive ? '<span class="turn-indicator">GILIRAN</span>' : ''}
+        `;
+        playersListEl.appendChild(row);
+    });
+}
+
+function addLog(msg, type = '') {
+    const item = document.createElement('div');
+    item.className = 'log-item' + (type ? ' ' + type : '');
+    item.textContent = msg;
+    logListEl.prepend(item);
+    while (logListEl.children.length > 30) logListEl.removeChild(logListEl.lastChild);
+}
+
+async function rollDice() {
+    if (rolling || !gameActive) return;
+    rolling = true;
+    btnRoll.disabled = true;
+
+    diceFaceEl.classList.add('rolling');
+    const result = Math.ceil(Math.random() * 6);
+    await new Promise(r => setTimeout(r, 500));
+    diceFaceEl.classList.remove('rolling');
+    diceFaceEl.textContent = DICE_EMOJI[result - 1];
+
+    const p = players[currentTurn];
+    let newPos = p.pos + result;
+
+    if (newPos > 100) {
+        addLog(`${p.emoji} ${p.name} dadu ${result} — terlalu jauh, tetap di ${p.pos}`);
+        rolling = false;
+        btnRoll.disabled = false;
+        return;
+    }
+
+    addLog(`${p.emoji} ${p.name} dadu ${result} → kotak ${newPos}`);
+    p.pos = newPos;
+    renderTokens();
+
+    if (SNAKES[p.pos]) {
+        const from = p.pos;
+        await new Promise(r => setTimeout(r, 350));
+        p.pos = SNAKES[from];
+        addLog(`🐍 Kena ular di ${from}! Turun ke kotak ${p.pos}`, 'snake');
+        renderTokens();
+    } else if (LADDERS[p.pos]) {
+        const from = p.pos;
+        await new Promise(r => setTimeout(r, 350));
+        p.pos = LADDERS[from];
+        addLog(`🪜 Naik tangga dari ${from} ke kotak ${p.pos}!`, 'ladder');
+        renderTokens();
+    }
+
+    renderPlayersList();
+
+    if (p.pos === 100) {
+        await new Promise(r => setTimeout(r, 400));
+        addLog(`🏆 ${p.name} MENANG!`, 'win');
+        showWin(p.name);
+        rolling = false;
+        return;
+    }
+
+    currentTurn = (currentTurn + 1) % players.length;
+    renderPlayersList();
+    rolling = false;
+    btnRoll.disabled = false;
+}
+
+function showWin(name) {
+    gameActive = false;
+    btnRoll.disabled = true;
+    document.getElementById('win-player-name').textContent = name;
+    winOverlay.classList.add('show');
+}
+
+function renderSetupInputs() {
+    playerInputsEl.innerHTML = '';
+    for (let i = 0; i < setupPlayerCount; i++) {
+        const row = document.createElement('div');
+        row.className = 'player-input-row';
+        row.innerHTML = `
+            <span style="font-size:1.3em">${PLAYER_EMOJI[i]}</span>
+            <input type="text" placeholder="Nama Pemain ${i+1}" value="${setupNames[i] || ''}" data-idx="${i}" maxlength="16">
+        `;
+        playerInputsEl.appendChild(row);
+    }
+    playerInputsEl.querySelectorAll('input').forEach(inp => {
+        inp.addEventListener('input', e => { setupNames[e.target.dataset.idx] = e.target.value; });
+    });
+    playerCountLbl.textContent = `${setupPlayerCount} Pemain`;
+}
+
+document.getElementById('add-player').addEventListener('click', () => {
+    if (setupPlayerCount < 4) { setupPlayerCount++; renderSetupInputs(); }
+});
+document.getElementById('remove-player').addEventListener('click', () => {
+    if (setupPlayerCount > 2) { setupPlayerCount--; renderSetupInputs(); }
+});
+document.getElementById('btn-start-game').addEventListener('click', () => {
+    players = [];
+    for (let i = 0; i < setupPlayerCount; i++) {
+        const name = (setupNames[i] || '').trim() || `Pemain ${i+1}`;
+        players.push({ name, pos: 1, color: PLAYER_COLORS[i], emoji: PLAYER_EMOJI[i] });
+    }
+    currentTurn = 0;
+    gameActive = true;
+    rolling = false;
+    setupOverlay.style.display = 'none';
+    logListEl.innerHTML = '';
+    addLog('Permainan dimulai! Semua mulai dari kotak 1.');
+    buildBoard();
+    renderTokens();
+    renderPlayersList();
+    btnRoll.disabled = false;
+});
+document.getElementById('btn-restart').addEventListener('click', () => {
+    winOverlay.classList.remove('show');
+    setupOverlay.style.display = 'flex';
+    renderSetupInputs();
+});
+btnRoll.addEventListener('click', rollDice);
+
+// Dark mode
+const dmToggle = document.getElementById('darkmode-toggle');
+function applyMode(isLight) {
+    document.body.classList.toggle('light', isLight);
+    dmToggle.textContent = isLight ? '🌙' : '☀️';
+    localStorage.setItem('homeMode', isLight ? 'light' : 'dark');
+    // Redraw arrows with same colors (they're hardcoded, no change needed)
+}
+dmToggle.addEventListener('click', () => applyMode(!document.body.classList.contains('light')));
+const saved = localStorage.getItem('homeMode');
+if (saved === 'light') applyMode(true);
+else if (saved === null && window.matchMedia('(prefers-color-scheme: light)').matches) applyMode(true);
+
+// Also redraw arrows on window resize
+window.addEventListener('resize', () => {
+    if (gameActive || boardEl.children.length > 0) drawArrows();
+});
+
+// Init
+buildBoard();
+renderSetupInputs();
+btnRoll.disabled = true;
+</script>
+</body>
+</html>
