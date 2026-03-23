@@ -264,6 +264,44 @@
 
         .pmcell.empty { background: transparent; box-shadow: none; }
 
+
+        /* ---- DRAG GHOST ---- */
+        #drag-ghost {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            display: none;
+            filter: drop-shadow(0 10px 28px rgba(0,0,0,0.65));
+            will-change: transform;
+        }
+        #drag-ghost.visible { display: block; }
+        #drag-ghost .piece-mini {
+            transform: scale(1.4);
+            transform-origin: top left;
+        }
+        #drag-ghost .pmcell {
+            box-shadow: inset 0 -3px 0 rgba(0,0,0,0.3), inset 0 2px 0 rgba(255,255,255,0.28);
+        }
+        .piece-slot.dragging {
+            transform: scale(0.82) !important;
+            opacity: 0.35 !important;
+        }
+        .gcell.preview {
+            animation: previewPulse 0.7s ease-in-out infinite alternate !important;
+            transform: scale(0.9) !important;
+        }
+        @keyframes previewPulse {
+            from { opacity: 0.4;  transform: scale(0.88); }
+            to   { opacity: 0.72; transform: scale(0.97); }
+        }
+        .gcell.just-placed {
+            animation: placePop 0.28s cubic-bezier(0.175,0.885,0.32,1.4) forwards !important;
+        }
+        @keyframes placePop {
+            0%   { transform: scale(0.72); }
+            65%  { transform: scale(1.12); }
+            100% { transform: scale(1); }
+        }
         /* ---- SCORE POPUP ---- */
         .score-popup {
             position: absolute;
@@ -400,6 +438,7 @@
     </div>
 
     <div class="combo-banner" id="combo-banner">COMBO!</div>
+    <div id="drag-ghost"></div>
 
     <div class="topbar">
         <a class="back-btn" href="index.html">← Beranda</a>
@@ -508,6 +547,7 @@ let score = 0;
 let best = parseInt(localStorage.getItem('blockblast_best') || '0');
 let level = 1;
 let gameOver = false;
+let isPlacing = false;  // prevent input while async placement runs
 let dragPiece = null;
 let previewCells = [];
 let touchStartX = 0, touchStartY = 0;
@@ -536,7 +576,13 @@ function initGame() {
     level = 1;
     selectedPiece = null;
     gameOver = false;
+    isPlacing = false;
     previewCells = [];
+    // Reset slot visuals
+    for (let i = 0; i < 3; i++) {
+        const slot = document.getElementById('slot-' + i);
+        if (slot) slot.style.opacity = '';
+    }
     goOverlay.classList.remove('show');
     renderGrid();
     spawnPieces();
@@ -623,8 +669,9 @@ function renderTray() {
             }
         }
         slot.appendChild(mini);
-        slot.classList.remove('used', 'selected');
-        slot.onclick = () => selectPiece(i);
+        slot.classList.remove('used', 'selected', 'dragging');
+        // onclick is a tap-to-select fallback (drag also works)
+        slot.onclick = () => { if (!isDragging) selectPiece(i); };
     }
 }
 
@@ -697,6 +744,7 @@ function onCellHover(e) {
 }
 
 function onCellClick(e) {
+    if (isPlacing) return;
     if (selectedPiece === null) {
         hintEl.textContent = 'Pilih balok di bawah dulu!';
         return;
@@ -706,7 +754,7 @@ function onCellClick(e) {
     placePiece(selectedPiece, r, c);
 }
 
-function placePiece(pidx, anchorR, anchorC) {
+async function placePiece(pidx, anchorR, anchorC) {
     if (!pieces[pidx]) return;
     const p = pieces[pidx];
     const cells = getPieceCells(p.shape, anchorR, anchorC);
@@ -718,12 +766,20 @@ function placePiece(pidx, anchorR, anchorC) {
 
     clearPreview();
 
-    // Place on grid
-    cells.forEach(([r, c]) => {
+    // Lock input while processing
+    isPlacing = true;
+
+    // Place on grid with landing pop animation
+    cells.forEach(([r, c], i) => {
         grid[r][c] = p.color;
         const cell = getCell(r, c);
         cell.classList.add('filled');
         cell.style.background = p.color;
+        // Stagger the pop animation slightly for each cell
+        setTimeout(() => {
+            cell.classList.add('just-placed');
+            setTimeout(() => cell.classList.remove('just-placed'), 300);
+        }, i * 18);
     });
 
     // Award placement points
@@ -737,16 +793,19 @@ function placePiece(pidx, anchorR, anchorC) {
     selectedPiece = null;
     document.querySelectorAll('.piece-slot').forEach(s => s.classList.remove('selected'));
 
-    // Clear lines
-    clearLines();
+    // Wait for line clearing animation to fully complete
+    await clearLines();
 
-    // Check if all 3 pieces used → spawn new
+    // All 3 pieces used → spawn new set
     if (pieces.every(p => p === null)) {
         spawnPieces();
     }
 
-    // Check game over
+    // Now check game over — AFTER grid is updated and new pieces are spawned
+    // Game over only if NONE of the remaining pieces can fit anywhere
     checkGameOver();
+
+    isPlacing = false;
     hintEl.textContent = 'Tap balok untuk memilih, lalu tap papan untuk menaruhnya';
 }
 
@@ -754,55 +813,59 @@ function placePiece(pidx, anchorR, anchorC) {
 // LINE CLEARING
 // =====================
 function clearLines() {
-    const rowsToClear = [];
-    const colsToClear = [];
+    return new Promise(resolve => {
+        const rowsToClear = [];
+        const colsToClear = [];
 
-    for (let r = 0; r < GRID_SIZE; r++) {
-        if (grid[r].every(c => c !== 0)) rowsToClear.push(r);
-    }
-    for (let c = 0; c < GRID_SIZE; c++) {
-        if (grid.every(row => row[c] !== 0)) colsToClear.push(c);
-    }
-
-    const totalLines = rowsToClear.length + colsToClear.length;
-    if (totalLines === 0) return;
-
-    // Animate clearing
-    const cellsToClear = new Set();
-    rowsToClear.forEach(r => {
-        for (let c = 0; c < GRID_SIZE; c++) cellsToClear.add(`${r},${c}`);
-    });
-    colsToClear.forEach(c => {
-        for (let r = 0; r < GRID_SIZE; r++) cellsToClear.add(`${r},${c}`);
-    });
-
-    cellsToClear.forEach(key => {
-        const [r, c] = key.split(',').map(Number);
-        const cell = getCell(r, c);
-        if (cell) cell.classList.add('clearing');
-    });
-
-    setTimeout(() => {
-        // Clear from grid state
-        rowsToClear.forEach(r => { grid[r] = Array(GRID_SIZE).fill(0); });
-        colsToClear.forEach(c => { grid.forEach(row => { row[c] = 0; }); });
-        renderGrid();
-
-        // Score: 50 per line, bonus for multi-line combo
-        const lineScore = totalLines * GRID_SIZE * 10;
-        const comboBonus = totalLines > 1 ? totalLines * 50 : 0;
-        addScore(lineScore + comboBonus);
-        showScorePopup(lineScore + comboBonus, rowsToClear, colsToClear);
-
-        if (totalLines >= 2) showCombo();
-
-        // Level up every 500 pts
-        const newLevel = Math.floor(score / 500) + 1;
-        if (newLevel > level) {
-            level = newLevel;
-            updateScoreDisplay();
+        for (let r = 0; r < GRID_SIZE; r++) {
+            if (grid[r].every(c => c !== 0)) rowsToClear.push(r);
         }
-    }, 280);
+        for (let c = 0; c < GRID_SIZE; c++) {
+            if (grid.every(row => row[c] !== 0)) colsToClear.push(c);
+        }
+
+        const totalLines = rowsToClear.length + colsToClear.length;
+        if (totalLines === 0) { resolve(); return; }
+
+        // Animate clearing
+        const cellsToClear = new Set();
+        rowsToClear.forEach(r => {
+            for (let c = 0; c < GRID_SIZE; c++) cellsToClear.add(`${r},${c}`);
+        });
+        colsToClear.forEach(c => {
+            for (let r = 0; r < GRID_SIZE; r++) cellsToClear.add(`${r},${c}`);
+        });
+
+        cellsToClear.forEach(key => {
+            const [r, c] = key.split(',').map(Number);
+            const cell = getCell(r, c);
+            if (cell) cell.classList.add('clearing');
+        });
+
+        setTimeout(() => {
+            // Clear from grid state
+            rowsToClear.forEach(r => { grid[r] = Array(GRID_SIZE).fill(0); });
+            colsToClear.forEach(c => { grid.forEach(row => { row[c] = 0; }); });
+            renderGrid();
+
+            // Score: per line + combo bonus
+            const lineScore = totalLines * GRID_SIZE * 10;
+            const comboBonus = totalLines > 1 ? totalLines * 50 : 0;
+            addScore(lineScore + comboBonus);
+            showScorePopup(lineScore + comboBonus, rowsToClear, colsToClear);
+
+            if (totalLines >= 2) showCombo();
+
+            // Level up every 500 pts
+            const newLevel = Math.floor(score / 500) + 1;
+            if (newLevel > level) {
+                level = newLevel;
+                updateScoreDisplay();
+            }
+
+            resolve();
+        }, 280);
+    });
 }
 
 function addScore(pts) {
@@ -849,67 +912,210 @@ function shakeGrid() {
 // =====================
 // GAME OVER CHECK
 // =====================
+// Game over = ALL remaining (non-null) pieces have NO valid position on the grid.
+// This is only called after placing a piece (and after lines are cleared).
+// The last piece must be placed first — you cannot get game over mid-tray.
 function checkGameOver() {
     const remaining = pieces.filter(p => p !== null);
-    if (remaining.length === 0) return; // will spawn new
 
-    const canPlaceAny = remaining.some(p => {
+    // If no pieces remain, new ones are about to spawn — not game over
+    if (remaining.length === 0) return;
+
+    // Check if every remaining piece is unplaceable anywhere
+    const anyCanFit = remaining.some(piece => {
         for (let r = 0; r < GRID_SIZE; r++) {
             for (let c = 0; c < GRID_SIZE; c++) {
-                const cells = getPieceCells(p.shape, r, c);
+                const cells = getPieceCells(piece.shape, r, c);
                 if (canPlace(cells)) return true;
             }
         }
         return false;
     });
 
-    if (!canPlaceAny) {
+    if (!anyCanFit) {
+        // Grey out unplaceable pieces to signal the situation
+        pieces.forEach((p, i) => {
+            if (p !== null) {
+                const slot = document.getElementById('slot-' + i);
+                slot.style.opacity = '0.3';
+            }
+        });
+
         setTimeout(() => {
             goScoreEl.textContent = score;
             goBestEl.textContent = best;
             goOverlay.classList.add('show');
-        }, 400);
+        }, 500);
     }
 }
 
 // =====================
-// TOUCH / DRAG SUPPORT
+// DRAG GHOST
 // =====================
-// Simple tap approach — works well on mobile
-document.querySelectorAll('.piece-slot').forEach(slot => {
-    slot.addEventListener('touchstart', e => {
-        const idx = parseInt(slot.dataset.slot);
-        selectPiece(idx);
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-    }, {passive:true});
-});
+const dragGhost = document.getElementById('drag-ghost');
+let ghostOffsetX = 0, ghostOffsetY = 0;
+let isDragging = false;
+let dragSlotIdx = null;
 
-gridEl.addEventListener('touchend', e => {
-    if (selectedPiece === null) return;
-    e.preventDefault();
-    const touch = e.changedTouches[0];
-    const el = document.elementFromPoint(touch.clientX, touch.clientY);
-    if (el && el.dataset.r !== undefined) {
-        const r = parseInt(el.dataset.r);
-        const c = parseInt(el.dataset.c);
-        placePiece(selectedPiece, r, c);
+function buildGhost(piece) {
+    dragGhost.innerHTML = '';
+    const rows = piece.shape.length;
+    const cols = piece.shape[0].length;
+    const mini = document.createElement('div');
+    mini.className = 'piece-mini';
+    mini.style.gridTemplateColumns = `repeat(${cols}, 22px)`;
+    mini.style.gridTemplateRows    = `repeat(${rows}, 22px)`;
+    mini.style.gap = '3px';
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const pc = document.createElement('div');
+            pc.className = piece.shape[r][c] ? 'pmcell' : 'pmcell empty';
+            if (piece.shape[r][c]) {
+                pc.style.background = piece.color;
+                pc.style.width = '22px';
+                pc.style.height = '22px';
+            } else {
+                pc.style.width = '22px';
+                pc.style.height = '22px';
+            }
+            mini.appendChild(pc);
+        }
     }
-}, {passive: false});
+    dragGhost.appendChild(mini);
+}
 
-gridEl.addEventListener('touchmove', e => {
-    if (selectedPiece === null) return;
-    e.preventDefault();
-    const touch = e.touches[0];
-    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+function moveGhost(clientX, clientY) {
+    // Centre ghost on finger/cursor
+    const gw = dragGhost.offsetWidth  || 30;
+    const gh = dragGhost.offsetHeight || 30;
+    dragGhost.style.left = (clientX - gw / 2) + 'px';
+    dragGhost.style.top  = (clientY - gh / 2 - 20) + 'px'; // offset up slightly so finger doesn't hide it
+}
+
+function startDrag(idx, clientX, clientY) {
+    if (isPlacing || !pieces[idx]) return;
+    isDragging = true;
+    dragSlotIdx = idx;
+    selectPiece(idx);
+
+    buildGhost(pieces[idx]);
+    moveGhost(clientX, clientY);
+    dragGhost.style.opacity = '0';
+    dragGhost.classList.add('visible');
+    // Fade in
+    requestAnimationFrame(() => { dragGhost.style.opacity = '1'; });
+
+    // Shrink the tray slot
+    document.getElementById('slot-' + idx).classList.add('dragging');
+}
+
+function duringDrag(clientX, clientY) {
+    if (!isDragging) return;
+    moveGhost(clientX, clientY);
+
+    // Find which grid cell is under cursor
+    dragGhost.style.display = 'none';
+    const el = document.elementFromPoint(clientX, clientY);
+    dragGhost.style.display = '';
     if (el && el.dataset.r !== undefined) {
         const r = parseInt(el.dataset.r);
         const c = parseInt(el.dataset.c);
         showPreview(r, c);
+    } else {
+        clearPreview();
     }
+}
+
+function endDrag(clientX, clientY) {
+    if (!isDragging) return;
+    isDragging = false;
+
+    // Hide ghost with a quick scale-down
+    dragGhost.style.transition = 'opacity 0.12s, transform 0.12s';
+    dragGhost.style.opacity = '0';
+    dragGhost.style.transform = 'scale(0.7)';
+    setTimeout(() => {
+        dragGhost.classList.remove('visible');
+        dragGhost.style.transition = '';
+        dragGhost.style.transform  = '';
+        dragGhost.style.opacity    = '1';
+    }, 130);
+
+    // Restore slot appearance
+    if (dragSlotIdx !== null) {
+        document.getElementById('slot-' + dragSlotIdx).classList.remove('dragging');
+    }
+
+    // Find drop target
+    dragGhost.style.display = 'none';
+    const el = document.elementFromPoint(clientX, clientY);
+    dragGhost.style.display = '';
+    clearPreview();
+
+    if (el && el.dataset.r !== undefined && selectedPiece !== null && !isPlacing) {
+        const r = parseInt(el.dataset.r);
+        const c = parseInt(el.dataset.c);
+        placePiece(selectedPiece, r, c);
+    }
+
+    dragSlotIdx = null;
+}
+
+// =====================
+// MOUSE DRAG (desktop)
+// =====================
+trayEl.addEventListener('mousedown', e => {
+    const slot = e.target.closest('.piece-slot');
+    if (!slot) return;
+    const idx = parseInt(slot.dataset.slot);
+    if (!pieces[idx]) return;
+    e.preventDefault();
+    startDrag(idx, e.clientX, e.clientY);
+});
+
+document.addEventListener('mousemove', e => {
+    if (!isDragging) {
+        // regular hover preview
+        if (selectedPiece !== null && e.target.dataset && e.target.dataset.r !== undefined) {
+            showPreview(parseInt(e.target.dataset.r), parseInt(e.target.dataset.c));
+        }
+        return;
+    }
+    duringDrag(e.clientX, e.clientY);
+});
+
+document.addEventListener('mouseup', e => {
+    if (!isDragging) return;
+    endDrag(e.clientX, e.clientY);
+});
+
+// =====================
+// TOUCH DRAG (mobile)
+// =====================
+trayEl.addEventListener('touchstart', e => {
+    const slot = e.target.closest('.piece-slot');
+    if (!slot) return;
+    const idx = parseInt(slot.dataset.slot);
+    if (!pieces[idx]) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    startDrag(idx, t.clientX, t.clientY);
 }, {passive: false});
 
-gridEl.addEventListener('mouseleave', clearPreview);
+document.addEventListener('touchmove', e => {
+    if (!isDragging) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    duringDrag(t.clientX, t.clientY);
+}, {passive: false});
+
+document.addEventListener('touchend', e => {
+    if (!isDragging) return;
+    const t = e.changedTouches[0];
+    endDrag(t.clientX, t.clientY);
+}, {passive: false});
+
+gridEl.addEventListener('mouseleave', () => { if (!isDragging) clearPreview(); });
 
 // =====================
 // SHAKE KEYFRAME
