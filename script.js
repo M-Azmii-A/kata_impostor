@@ -310,14 +310,14 @@ const revealRoleScreen = document.getElementById('reveal-role-screen');
 const gameplayScreen = document.getElementById('gameplay-screen');
 
 const setupStartButton = document.getElementById('setup-start-button');
-const showRoleButton = document.getElementById('show-role-button');
 const hideRoleButton = document.getElementById('hide-role-button');
 const restartButton = document.getElementById('restart-button');
+const cardGrid = document.getElementById('card-grid');
+const passToPlayerText = document.getElementById('pass-to-player-text');
 
 const innocentCountInput = document.getElementById('innocent-count');
 const impostorCountInput = document.getElementById('impostor-count');
 
-const passToPlayerText = document.getElementById('pass-to-player-text');
 const roleCard = document.getElementById('role-card');
 const playerRoleText = document.getElementById('player-role');
 const playerWordText = document.getElementById('player-word');
@@ -327,6 +327,7 @@ const themeGrid = document.getElementById('theme-grid');
 
 // --- 3. VARIABEL STATE PERMAINAN ---
 let roles = [];
+let pickedCards = [];
 let currentPlayerIndex = 0;
 let innocentWord = '';
 let impostorWord = '';
@@ -381,9 +382,42 @@ function setupGame() {
     innocentWord = wordPair.innocent;
     impostorWord = wordPair.impostor;
 
-    currentPlayerIndex = 0;
-    passToPlayerText.textContent = `Oper perangkat ke Pemain ${currentPlayerIndex + 1}`;
+    pickedCards = new Array(roles.length).fill(false);
+    renderCardGrid();
     switchScreen('pass-device-screen');
+}
+
+function renderCardGrid() {
+    cardGrid.innerHTML = '';
+
+    roles.forEach((role, index) => {
+        const cardBtn = document.createElement('button');
+        cardBtn.type = 'button';
+        cardBtn.className = 'pick-card' + (pickedCards[index] ? ' taken' : '');
+
+        if (pickedCards[index]) {
+            cardBtn.disabled = true;
+            cardBtn.innerHTML = `<span class="pick-card-check">✓</span>`;
+        } else {
+            cardBtn.innerHTML = `
+                <span class="pick-card-icon">🂠</span>
+                <span class="pick-card-num">${index + 1}</span>
+            `;
+            cardBtn.addEventListener('click', () => pickCard(index));
+        }
+
+        cardGrid.appendChild(cardBtn);
+    });
+
+    const remaining = roles.length - pickedCards.filter(Boolean).length;
+    passToPlayerText.textContent = remaining === roles.length
+        ? 'Oper perangkat ke pemain berikutnya, lalu ketuk satu kartu untuk melihat peranmu.'
+        : `Sisa ${remaining} kartu. Oper perangkat ke pemain berikutnya, lalu ketuk satu kartu.`;
+}
+
+function pickCard(index) {
+    currentPlayerIndex = index;
+    showPlayerRole();
 }
 
 function showPlayerRole() {
@@ -405,9 +439,11 @@ function showPlayerRole() {
 }
 
 function hideRoleAndContinue() {
-    currentPlayerIndex++;
-    if (currentPlayerIndex < roles.length) {
-        passToPlayerText.textContent = `Oper perangkat ke Pemain ${currentPlayerIndex + 1}`;
+    pickedCards[currentPlayerIndex] = true;
+    const remaining = roles.length - pickedCards.filter(Boolean).length;
+
+    if (remaining > 0) {
+        renderCardGrid();
         switchScreen('pass-device-screen');
     } else {
         const themeLabel = themes[selectedTheme].label;
@@ -425,7 +461,6 @@ function restartGame() {
 
 // --- 6. EVENT LISTENERS ---
 setupStartButton.addEventListener('click', setupGame);
-showRoleButton.addEventListener('click', showPlayerRole);
 hideRoleButton.addEventListener('click', hideRoleAndContinue);
 restartButton.addEventListener('click', restartGame);
 
